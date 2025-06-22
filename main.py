@@ -1,4 +1,4 @@
-# import logging
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, ContextTypes
 from sqlalchemy import create_engine, text
@@ -6,13 +6,11 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Replace these with your actual credentials
-BOT_TOKEN = "7986704004:AAFvJZPMgk0KtWvSQDdyVCoXuDkH6w18jj8"
-DB_URL = "postgresql://postgres.mztsazbtadyfrraqdkfn:bt*+Bmun_.s5U-t@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+DB_URL = os.environ.get("DB_URL")
 DISCUSSION_GROUP_NAME = "Cheeky Softwear Club Chat"
 TIME_TO_CLEAR_DB = 4 # Time to clear the database (4 AM)
 
-# Setup logging
-# logging.basicConfig(level=logging.INFO)
 engine = create_engine(DB_URL)
 
 # Initialize Scheduler
