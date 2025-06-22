@@ -4,6 +4,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHan
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from flask import Flask
+from threading import Thread
 
 # Replace these with your actual credentials
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -138,7 +140,19 @@ app.add_handler(MessageHandler(filters.PHOTO, handle_item))
 app.add_handler(CommandHandler("deleted", show_deleted))
 app.add_handler(CommandHandler("start", start))
 
+def run_dummy_server():
+    app = Flask(__name__)
+
+    @app.route('/')
+    def index():
+        return "Bot is running!"
+
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
 if __name__ == "__main__":
+    # Start dummy server in background to keep Render happy
+    Thread(target=run_dummy_server).start()
     app.run_polling()
 
 
