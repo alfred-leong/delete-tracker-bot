@@ -151,25 +151,27 @@ flask_app = Flask(__name__)
 def index():
     return "Bot is live."
 
-@flask_app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    asyncio.run(telegram_app.process_update(update))
-    return 'OK'
-
-async def startup():
+async def start_bot():
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
-    print("✅ Webhook set and bot initialized.")
+    print("✅ Bot initialized and webhook set.")
 
-    # Start Flask server in a background thread so it binds to a port immediately
-    def run_flask():
-        port = int(os.environ.get("PORT", 5000))
-        flask_app.run(host="0.0.0.0", port=port)
+# Flask endpoint
+@flask_app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    asyncio.create_task(telegram_app.process_update(update))  # schedule task without blocking Flask
+    return 'OK'
 
-    threading.Thread(target=run_flask).start()
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    asyncio.run(startup())
+    # Start Flask server in a thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
 
+    # Run bot in main thread's asyncio loop
+    asyncio.run(start_bot())
