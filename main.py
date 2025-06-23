@@ -156,11 +156,6 @@ def webhook():
     asyncio.run(telegram_app.process_update(update))
     return 'OK'
 
-# --- Set webhook on startup ---
-async def set_webhook():
-    await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
-    print("✅ Webhook set.")
-
 async def startup():
     await telegram_app.initialize()
     await telegram_app.start()
