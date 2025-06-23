@@ -161,7 +161,11 @@ async def start_bot():
 @flask_app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    asyncio.create_task(telegram_app.process_update(update))  # schedule task without blocking Flask
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(telegram_app.process_update(update))
+    loop.close()
+
     return 'OK'
 
 def run_flask():
