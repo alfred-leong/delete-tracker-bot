@@ -6,6 +6,7 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request
 import asyncio
+import threading
 
 # Replace these with your actual credentials
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -162,10 +163,13 @@ async def startup():
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
     print("✅ Webhook set and bot initialized.")
 
+    # Start Flask server in a background thread so it binds to a port immediately
+    def run_flask():
+        port = int(os.environ.get("PORT", 5000))
+        flask_app.run(host="0.0.0.0", port=port)
+
+    threading.Thread(target=run_flask).start()
+
 if __name__ == "__main__":
     asyncio.run(startup())
-    
-    port = int(os.environ.get("PORT", 5000))
-    flask_app.run(host="0.0.0.0", port=port)
-
 
