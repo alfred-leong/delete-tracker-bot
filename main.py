@@ -4,12 +4,13 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHan
 from sqlalchemy import create_engine, text
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask
-from threading import Thread
+from flask import Flask, request
+import asyncio
 
 # Replace these with your actual credentials
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DB_URL = os.environ.get("DB_URL")
+WEBHOOK_DOMAIN = os.environ.get("WEBHOOK_DOMAIN")
 DISCUSSION_GROUP_NAME = "Cheeky Softwear Club Chat"
 TIME_TO_CLEAR_DB = 4 # Time to clear the database (4 AM)
 
@@ -133,28 +134,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
 
-# Setup app
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler((filters.TEXT) & (~filters.COMMAND), handle_message))
-app.add_handler(MessageHandler(filters.PHOTO, handle_item))
-app.add_handler(CommandHandler("deleted", show_deleted))
-app.add_handler(CommandHandler("start", start))
+# -- Telegram Application --
+telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+telegram_app.add_handler(MessageHandler((filters.TEXT & (~filters.COMMAND)), handle_message))
+telegram_app.add_handler(MessageHandler(filters.PHOTO, handle_item))
+telegram_app.add_handler(CommandHandler("deleted", show_deleted))
+telegram_app.add_handler(CommandHandler("start", start))
 
-def run_dummy_server():
-    app = Flask(__name__)
+scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
 
-    @app.route('/')
-    def index():
-        return "Bot is running!"
+# --- Flask Server ---
+flask_app = Flask(__name__)
 
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+@flask_app.route('/')
+def index():
+    return "Bot is live."
+
+@flask_app.route(f'/webhook/{BOT_TOKEN}', methods=['POST'])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    asyncio.run(telegram_app.process_update(update))
+    return 'OK'
+
+# --- Set webhook on startup ---
+async def set_webhook():
+    await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
+    print("✅ Webhook set.")
 
 if __name__ == "__main__":
-    # Start dummy server in background to keep Render happy
-    Thread(target=run_dummy_server).start()
-    app.run_polling()
-
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
+    
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port)
 
 
 
