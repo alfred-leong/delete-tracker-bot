@@ -114,6 +114,7 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def clear_db():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM messages"))
+        conn.execute(text("DELETE FROM items"))
     now = datetime.now().strftime("%Y-%m-%d")
     print(f"✅ Database cleared successfully at {TIME_TO_CLEAR_DB}AM on {now}")
 
@@ -141,8 +142,6 @@ telegram_app.add_handler(MessageHandler((filters.TEXT & (~filters.COMMAND)), han
 telegram_app.add_handler(MessageHandler(filters.PHOTO, handle_item))
 telegram_app.add_handler(CommandHandler("deleted", show_deleted))
 telegram_app.add_handler(CommandHandler("start", start))
-
-scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
 
 # --- Flask Server ---
 flask_app = Flask(__name__)
