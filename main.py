@@ -160,7 +160,7 @@ def run_flask():
 
 async def start_bot():
     scheduler.start()
-    scheduler.add_job(clear_db, trigger='cron', hour=10, minute=57)
+    scheduler.add_job(clear_db, trigger='cron', hour=11, minute=15)
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
