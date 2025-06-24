@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask, request
 import asyncio
 import threading
+from pytz import timezone
 
 # Replace these with your actual credentials
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -18,7 +19,7 @@ TIME_TO_CLEAR_DB = 4 # Time to clear the database (4 AM)
 engine = create_engine(DB_URL)
 
 # Initialize Scheduler
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(timezone=timezone('Asia/Singapore'))
 
 # Store message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -159,11 +160,11 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=port)
 
 async def start_bot():
-    scheduler.start()
-    scheduler.add_job(clear_db, trigger='cron', hour=11, minute=15)
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
+    scheduler.start()
+    scheduler.add_job(clear_db, trigger='cron', hour=11, minute=32)
     print("✅ Bot initialized and webhook set.")
 
 # --- Main ---
