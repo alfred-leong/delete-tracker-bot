@@ -110,7 +110,7 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=target_chat_id, text=message)
 
 # Clear messages every day at 4am
-def clear_db():
+async def clear_db():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM messages"))
         conn.execute(text("DELETE FROM items"))
