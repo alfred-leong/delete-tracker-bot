@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, ContextTypes
 from sqlalchemy import create_engine, text
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.background import AsyncIOScheduler
 from flask import Flask, request
 import asyncio
 import threading
@@ -18,8 +18,7 @@ TIME_TO_CLEAR_DB = 4 # Time to clear the database (4 AM)
 engine = create_engine(DB_URL)
 
 # Initialize Scheduler
-scheduler = BackgroundScheduler()
-scheduler.start()
+scheduler = AsyncIOScheduler()
 
 # Store message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -134,8 +133,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Hi {update.effective_chat.username}, I will now store your messages in the database. Use /deleted in the discussion group to see deleted comments.")
 
-scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
-
 # -- Telegram Application --
 telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
 telegram_app.add_handler(MessageHandler((filters.TEXT & (~filters.COMMAND)), handle_message))
@@ -162,6 +159,8 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=port)
 
 async def start_bot():
+    scheduler.start()
+    scheduler.add_job(clear_db, trigger='cron', hour=10, minute=45)
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
