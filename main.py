@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, ContextTypes
 from sqlalchemy import create_engine, text
 from datetime import datetime
-from apscheduler.schedulers.background import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from flask import Flask, request
 import asyncio
 import threading
@@ -160,7 +160,7 @@ def run_flask():
 
 async def start_bot():
     scheduler.start()
-    scheduler.add_job(clear_db, trigger='cron', hour=10, minute=45)
+    scheduler.add_job(clear_db, trigger='cron', hour=10, minute=57)
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
