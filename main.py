@@ -164,7 +164,7 @@ async def start_bot():
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
     scheduler.start()
-    scheduler.add_job(clear_db, trigger='cron', hour=11, minute=32)
+    scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
     print("✅ Bot initialized and webhook set.")
 
 # --- Main ---
