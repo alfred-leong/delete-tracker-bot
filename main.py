@@ -13,8 +13,7 @@ from pytz import timezone
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DB_URL = os.environ.get("DB_URL")
 WEBHOOK_DOMAIN = os.environ.get("WEBHOOK_DOMAIN")
-DISCUSSION_GROUP_NAME = "Cheeky Softwear Club Chat"
-TIME_TO_CLEAR_DB = 4 # Time to clear the database (4 AM)
+TIME_TO_CLEAR_DB = 12 # Time to clear the database (12PM)
 
 engine = create_engine(DB_URL)
 
@@ -24,13 +23,14 @@ scheduler = AsyncIOScheduler(timezone=timezone('Asia/Singapore'))
 # Store message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(update)
-    if update.message and update.message.chat.title == DISCUSSION_GROUP_NAME and update.message.reply_to_message:
+    if update.message and update.message.chat.type == "group" and update.message.reply_to_message:
         print("Storing message in database...")
         message_id = update.message.message_id
         username = update.message.from_user.username or update.message.from_user.full_name
         text_msg = update.message.text or ""
         now = datetime.now()
         message_thread_id = update.message.message_thread_id
+        message_chat_id = update.cmessage.chat.id
 
         with engine.begin() as conn:
             result = conn.execute(text("""
@@ -41,7 +41,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "username": username,
                 "text": text_msg,
                 "ts": now,
-                "message_thread_id": message_thread_id
+                "message_thread_id": message_thread_id,
+                "chat_id": message_chat_id
             })
 
             if result.rowcount == 1:
@@ -51,10 +52,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Handling item...")
-    if update.message and update.message.chat.title == DISCUSSION_GROUP_NAME:
+    if update.message and update.message.chat.type == "group":
         print("Storing item in database...")
         message_id = update.message.message_id
         caption = update.message.caption
+        message_chat_id = update.message.chat.id
+        
         if caption:
             with engine.begin() as conn:
                 result = conn.execute(text("""
@@ -63,6 +66,7 @@ async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 """), {
                     "msg_id": message_id,
                     "caption": caption,
+                    "chat_id": message_chat_id
                 })
 
                 if result.rowcount == 1:
@@ -74,12 +78,28 @@ async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.from_user:
         username = update.message.from_user.username
+
+        # Check if user exists
+        with engine.connect() as conn:
+            user_exists = conn.execute(
+                text("SELECT 1 FROM usernames WHERE username = :uname"),
+                {"uname": username}
+            ).fetchone()
+
+        if not user_exists:
+            await context.bot.send_message(chat_id=chat_id, text="You are not a registered user.")
+            return
+        
         deleted = []
         chat_id = update.effective_chat.id
 
         # Get all messages and check which no longer exist
         with engine.connect() as conn:
-            messages = conn.execute(text("SELECT message_id, username, text, message_thread_id FROM messages")).fetchall()
+            messages = conn.execute(text("""
+                SELECT message_id, username, text, message_thread_id
+                FROM messages
+                WHERE chat_id = :chat_id
+            """), {"chat_id": chat_id}).fetchall()
 
             for msg in messages:
                 try:
@@ -88,9 +108,11 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.delete_message(chat_id=chat_id,message_id=forwarded_msg.message_id)
                 except:
                     with engine.connect() as conn:
-                        item_row = conn.execute(text(
-                            "SELECT caption FROM items WHERE message_id = :message_thread_id"
-                        ), {"message_thread_id": msg.message_thread_id}).fetchone()
+                        item_row = conn.execute(text("""
+                            SELECT caption FROM items
+                            WHERE message_id = :message_thread_id
+                            AND chat_id = :chat_id
+                        """), {"message_thread_id": msg.message_thread_id, "chat_id": chat_id}).fetchone()
 
                     item_caption = item_row.caption if item_row else "(unknown item)"
 
@@ -102,11 +124,13 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not row:
             print("❌ chat_id not found in database.")
             return
+        
         target_chat_id = int(row.chat_id)
         if not deleted:
-            message = "No deleted messages detected."
+            message = f"No deleted messages detected in '{update.effective_chat.title or chat_id}'."
         else:
-            message = "Deleted messages:\n\n" + "\n".join(deleted)
+            chat_label = update.effective_chat.title or f"Chat ID: {chat_id}"
+            message = f"Deleted messages from {chat_label}:\n\n" + "\n".join(deleted)
 
         await context.bot.send_message(chat_id=target_chat_id, text=message)
 
