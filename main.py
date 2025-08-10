@@ -9,7 +9,7 @@ import asyncio
 import threading
 from pytz import timezone
 
-# Replace these with your actual credentials
+# For production
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 DB_URL = os.environ.get("DB_URL")
 WEBHOOK_DOMAIN = os.environ.get("WEBHOOK_DOMAIN")
@@ -23,19 +23,19 @@ scheduler = AsyncIOScheduler(timezone=timezone('Asia/Singapore'))
 # Store message
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(update)
-    if update.message and update.message.chat.type == "group" and update.message.reply_to_message:
+    if update.message and update.message.chat.type in ["group", "supergroup"] and update.message.reply_to_message:
         print("Storing message in database...")
         message_id = update.message.message_id
         username = update.message.from_user.username or update.message.from_user.full_name
         text_msg = update.message.text or ""
         now = datetime.now()
         message_thread_id = update.message.message_thread_id
-        message_chat_id = update.cmessage.chat.id
+        message_chat_id = update.message.chat.id
 
         with engine.begin() as conn:
             result = conn.execute(text("""
-                INSERT INTO messages (id, message_id, username, text, timestamp, message_thread_id)
-                VALUES (gen_random_uuid(), :msg_id, :username, :text, :ts, :message_thread_id)
+                INSERT INTO messages (id, message_id, username, text, timestamp, message_thread_id, chat_id)
+                VALUES (gen_random_uuid(), :msg_id, :username, :text, :ts, :message_thread_id, :chat_id)
             """), {
                 "msg_id": message_id,
                 "username": username,
@@ -52,7 +52,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Handling item...")
-    if update.message and update.message.chat.type == "group":
+    if update.message and update.message.chat.type in ["group", "supergroup"]:
         print("Storing item in database...")
         message_id = update.message.message_id
         caption = update.message.caption
@@ -61,8 +61,8 @@ async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if caption:
             with engine.begin() as conn:
                 result = conn.execute(text("""
-                    INSERT INTO items (message_id, caption)
-                    VALUES (:msg_id, :caption)
+                    INSERT INTO items (message_id, caption, chat_id)
+                    VALUES (:msg_id, :caption, :chat_id)
                 """), {
                     "msg_id": message_id,
                     "caption": caption,
@@ -76,22 +76,12 @@ async def handle_item(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Manual command to query deleted comments
 async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(update)
     if update.message and update.message.from_user:
         username = update.message.from_user.username
-
-        # Check if user exists
-        with engine.connect() as conn:
-            user_exists = conn.execute(
-                text("SELECT 1 FROM usernames WHERE username = :uname"),
-                {"uname": username}
-            ).fetchone()
-
-        if not user_exists:
-            await context.bot.send_message(chat_id=chat_id, text="You are not a registered user.")
-            return
+        chat_id = update.effective_chat.id
         
         deleted = []
-        chat_id = update.effective_chat.id
 
         # Get all messages and check which no longer exist
         with engine.connect() as conn:
@@ -100,7 +90,6 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 FROM messages
                 WHERE chat_id = :chat_id
             """), {"chat_id": chat_id}).fetchall()
-
             for msg in messages:
                 try:
                     forwarded_msg = await context.bot.forward_message(chat_id=chat_id, from_chat_id=chat_id, message_id=msg.message_id)
@@ -117,22 +106,14 @@ async def show_deleted(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     item_caption = item_row.caption if item_row else "(unknown item)"
 
                     deleted.append(f"@{msg.username}: {msg.text}\nItem: {item_caption}\n\n")
-
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT chat_id FROM usernames WHERE username = :uname"), {"uname": username})
-            row = result.fetchone()
-        if not row:
-            print("❌ chat_id not found in database.")
-            return
         
-        target_chat_id = int(row.chat_id)
         if not deleted:
             message = f"No deleted messages detected in '{update.effective_chat.title or chat_id}'."
         else:
             chat_label = update.effective_chat.title or f"Chat ID: {chat_id}"
             message = f"Deleted messages from {chat_label}:\n\n" + "\n".join(deleted)
 
-        await context.bot.send_message(chat_id=target_chat_id, text=message)
+        await context.bot.send_message(chat_id=chat_id, text=message)
 
 # Clear messages every day at 4am
 async def clear_db():
@@ -180,16 +161,25 @@ def webhook():
     return 'OK'
 
 def run_flask():
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5050))
     flask_app.run(host="0.0.0.0", port=port)
 
 async def start_bot():
+    # For production with webhook
     await telegram_app.initialize()
     await telegram_app.start()
     await telegram_app.bot.set_webhook(f"{WEBHOOK_DOMAIN}/webhook/{BOT_TOKEN}")
     scheduler.start()
     scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
     print("✅ Bot initialized and webhook set.")
+
+    # # For testing on local machine
+    # await telegram_app.initialize()
+    # await telegram_app.start()
+    # await telegram_app.updater.start_polling()
+    # scheduler.start()
+    # scheduler.add_job(clear_db, trigger='cron', hour=TIME_TO_CLEAR_DB, minute=0)
+    # print("✅ Bot initialized on local machine")
 
 # --- Main ---
 if __name__ == "__main__":
